@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"os"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -92,6 +93,19 @@ func Differ(a, b []int64) (n, o []int64) {
 	return
 }
 
+// https://stackoverflow.com/a/71864796
+func removeDuplicates[T string | int64](sliceList []T) []T {
+	allKeys := make(map[T]bool)
+	list := []T{}
+	for _, item := range sliceList {
+		if _, value := allKeys[item]; !value {
+			allKeys[item] = true
+			list = append(list, item)
+		}
+	}
+	return list
+}
+
 func main() {
 	myport := os.Getenv("PORT")
 	if myport == "" {
@@ -124,11 +138,15 @@ func main() {
 			time.Sleep(nexttick)
 			nexttick = time.Second * time.Duration(90+rand.Intn(5))
 
+			total := 0
 			ids := make([]int64, 0)
 			url := fmt.Sprintf("https://steamcommunity.com/groups/%s/memberslistxml/?xml=1", groupname)
+			randnum := rand.Intn(6669420)
+
+			fullshit := ""
 
 			for url != "" {
-				url += fmt.Sprintf("&x=%d", rand.Intn(69420)) // cache busting
+				url += fmt.Sprintf("&x=%d", randnum) // cache busting
 				log.Println("req url: ", url)
 				resp, err := http.Get(url)
 
@@ -144,6 +162,7 @@ func main() {
 					nexttick = time.Second * 10
 					continue toploop
 				}
+				fullshit += string(body) + "\n"
 
 				var groupxml MemberList
 				err = xml.Unmarshal(body, &groupxml)
@@ -153,6 +172,10 @@ func main() {
 					continue toploop
 				}
 
+				if total == 0 {
+					total = groupxml.MemberCount
+				}
+
 				ids = append(ids, groupxml.Members.SteamID64...)
 				url = groupxml.NextPageLink
 				if url != "" {
@@ -160,14 +183,32 @@ func main() {
 				}
 			}
 
+			ids = removeDuplicates(ids)
+
 			oldids := t.Get()
-			sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
-			if len(webhookurl) != 0 {
+			if len(ids) < total || len(webhookurl) != 0 {
 				n, o := Differ(oldids, ids)
-				if (len(oldids) != 0 && len(n) != 0) || len(o) != 0 {
+				blah := ""
+				// I see random members disappearing from the steam group sometimes...
+				// I'm not sure if they're ending up on different pages due to ingame status or something...
+				// Or maybe steam is just having a bad sharded db or something with that user... I'm just guessing...
+				// Anyway, I'm just going to readd removed users just in case the count from the xml is correct
+				if len(ids) < total {
+					blah = fmt.Sprintf("len(ids) (%d) < memberCount (%d).. not removing %v\n", len(ids), total, o)
+					log.Print(blah)
+					ids = append(ids, o...)
+					o = nil
+				}
+
+				if len(webhookurl) != 0 && ((len(oldids) != 0 && len(n) != 0) || len(o) != 0 || len(ids) < total) {
+					for _, element := range o {
+						if strings.Contains(fullshit, fmt.Sprintf("%d", element)) {
+							log.Printf("we do have %d?", element)
+						}
+					}
 					go func() {
 						username := "Group Logger"
-						content := fmt.Sprintf("New: %v\nRemoved: %v", n, o)
+						content := fmt.Sprintf("%sNew: %v\nRemoved: %v", blah, n, o)
 						if len(content) > 1999 {
 							content = content[:1999] // buhhhh
 						}
@@ -183,6 +224,7 @@ func main() {
 					}()
 				}
 			}
+			sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
 			t.Set(ids)
 		}
 	}()
@@ -193,6 +235,7 @@ func main() {
 	})
 
 	http.HandleFunc(fmt.Sprintf("/%s", secretendpoint), func(w http.ResponseWriter, r *http.Request) {
+		log.Println("poke")
 		fuck := fmt.Sprintf("%v", t.Get())[1:] // trim '['
 		fuck = fuck[:len(fuck)-1]              // trim ']'
 		w.Header().Set("Content-Type", "plain/text")
