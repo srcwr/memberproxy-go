@@ -148,7 +148,7 @@ func main() {
 				var groupxml MemberList
 				err = xml.Unmarshal(body, &groupxml)
 				if err != nil {
-					log.Printf("Failed to parse XML (%s): %s -- Retrying in 10s...", url, err)
+					log.Printf("Failed to parse XML (%s): %s -- Retrying in 10s...\nContent: %s", url, err, string(body))
 					nexttick = time.Second * 10
 					continue toploop
 				}
