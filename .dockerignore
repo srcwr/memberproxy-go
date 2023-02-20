@@ -1,0 +1,9 @@
+# flyctl launch added from .gitignore
+**\*
+!**\.dockerignore
+!**\.gitignore
+!**\fly.toml
+!**\README.md
+!**\go.mod
+!**\go.sum
+!**\memberproxy.go
