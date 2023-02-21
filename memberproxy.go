@@ -140,7 +140,7 @@ func main() {
 
 			total := 0
 			ids := make([]int64, 0)
-			url := fmt.Sprintf("https://steamcommunity.com/groups/%s/memberslistxml/?xml=1", groupname)
+			url := fmt.Sprintf("https://steamcommunity.com/groups/%s/memberslistxml/?xml=1&p=1", groupname)
 			randnum := rand.Intn(6669420)
 
 			fullshit := ""
